@@ -1,29 +1,45 @@
 # S&P 500 Financial Performance Dashboard
 
-A self-contained, SQL-first financial dashboard: real S&P 500 company data,
-cleaned and derived with SQL, rendered as an interactive HTML dashboard with
-no server and no dependencies.
+A SQL-first financial reconciliation of what the market says S&P 500 companies
+are worth against what their own numbers say they're earning — built the way
+an equity research associate would build a screening tool: derive revenue and
+profitability from public ratios, verify them against known company
+financials, then hand off an interactive dashboard, not a spreadsheet.
 
-**Live file:** [dashboard.html](dashboard.html) — open it directly in a browser.
+## Business Context
 
-![Dashboard screenshot](screenshot.png)
-<!-- Upload your own screenshot of dashboard.html to the repo root as screenshot.png before pushing. -->
+Public financial datasets rarely hand you the two numbers analysts actually
+want — **revenue** and **net income** — as clean columns. What you get
+instead are valuation ratios: market cap, price-to-sales, price-to-earnings,
+dividend yield. The skill this project exercises is recognizing that those
+ratios *encode* revenue and net income, because they all share the same
+underlying share count, and pulling the real numbers back out with SQL. It's
+the same move a screening analyst makes when a data vendor gives you
+multiples instead of financials: derive, don't guess.
 
-## Data
+## What This Project Answers
 
-Two public CSVs from the [`datasets` org on GitHub](https://github.com/datasets):
+- Which S&P 500 companies generate the highest revenue and net income?
+- Which companies convert revenue to profit most efficiently (net margin)?
+- How does profitability differ by sector — is Tech really more profitable
+  than Healthcare, or does that only hold for a handful of giants?
+- Which companies pay the highest dividend yield, and does high yield
+  correlate with weaker margins?
+- How concentrated is the S&P 500 — how much of its combined $18T+ in revenue
+  comes from just the top 10 names?
 
-- [`s-and-p-500-companies-financials`](https://github.com/datasets/s-and-p-500-companies-financials) —
-  price, P/E, dividend yield, EPS, market cap, EBITDA, price/sales, price/book
-  for each S&P 500 company (source: Yahoo Finance snapshot).
-- [`s-and-p-500-companies`](https://github.com/datasets/s-and-p-500-companies) —
-  GICS sector and sub-industry for each company.
+## Dataset
 
-Both are checked in as CSVs in the repo root so the project runs with no downloads.
+Real S&P 500 constituent data, ~500 companies, from the public
+[`datasets` org on GitHub](https://github.com/datasets):
 
-Neither file reports **revenue** or **net income** directly — but both fall
-out of ratios that *are* reported, since market cap, price/sales, and
-price/earnings all share the same underlying share count:
+| Source | Fields |
+|---|---|
+| [`s-and-p-500-companies-financials`](https://github.com/datasets/s-and-p-500-companies-financials) | price, P/E, dividend yield, EPS, market cap, EBITDA, price/sales, price/book (Yahoo Finance snapshot) |
+| [`s-and-p-500-companies`](https://github.com/datasets/s-and-p-500-companies) | GICS sector and sub-industry per company |
+
+Both are checked into the repo root as CSVs so the project runs with no
+downloads. Neither reports revenue or net income directly — both are derived:
 
 ```
 revenue    = market_cap / price_to_sales
@@ -31,82 +47,85 @@ net_income = market_cap / price_to_earnings
 net_margin = net_income / revenue
 ```
 
-This makes the project a good exercise in **derived metrics**: the dashboard
-isn't just displaying columns, it's computing the numbers it displays.
-
 > These are estimates from trailing valuation ratios, not audited financial
-> statements. Good for practicing the workflow, not for investment decisions.
+> statements — built for practicing the analysis workflow, not for
+> investment decisions.
 
-## Business Questions
+## The Dashboard
 
-- Which companies generate the highest revenue and net income?
-- Which companies have the strongest net margin?
-- How does financial performance vary by sector?
-- Which companies pay the highest dividend yield?
+**Live file:** [dashboard.html](dashboard.html) — self-contained, open it
+directly in any browser, no server required.
 
-## KPIs / Fields
+### Overview: KPIs and Leaderboards
+Four headline metrics (combined revenue, combined net income, average net
+margin, average dividend yield) plus four ranked leaderboards — top 10 by
+revenue, market cap, net margin, and dividend yield. Rows are ranked lists
+with an inline proportional bar, not plain bar charts, so you can scan both
+the ranking and the relative scale at once.
 
-- Combined Revenue
-- Combined Net Income
-- Avg Net Margin %
-- Avg Dividend Yield %
-- Top 10 by Revenue / Market Cap / Net Margin / Dividend Yield
-- Net Margin Distribution (tiered)
-- Revenue by Sector
+![Dashboard overview](preview_overview.png)
 
-## What to Build
+### Distribution and Sector Breakdown
+A net margin distribution across five tiers, and a revenue-by-sector
+breakdown across all 11 GICS sectors — both charts are clickable and drive
+the same filters as the dropdowns above them.
 
-An executive financial dashboard with ranked leaderboards (not plain bar
-charts — numbered rows with an inline proportional bar), a net margin
-distribution, and a revenue-by-sector breakdown, all recomputing live from
-two filters: **sector** and **net margin tier**.
+![Margin distribution and sector breakdown](preview_charts.png)
 
-## Project Structure
+Every number on both screens recomputes live from two filters — **sector**
+and **net margin tier** — with a third filter for **revenue tier** in the
+control bar. Nothing here is a static export; it's all client-side JavaScript
+running against the full company dataset embedded in the page.
 
-```
-constituents.csv               raw CSV: sector per company
-constituents-financials.csv    raw CSV: price, P/E, market cap, etc.
-build.py                       SQL-first pipeline: loads, cleans, derives, exports
-by_sector.csv                  } 
-companies_full.csv             }
-margin_distribution.csv        }  one CSV per analysis query
-summary.csv                    }  (generated by build.py)
-top10_*.csv                    }
-dashboard_template.html        dashboard markup/CSS/JS, with a data placeholder
-build_html.py                  injects companies_full.csv into the template
-dashboard.html                 the finished, self-contained dashboard (generated)
-screenshot.png                 preview image shown above (add your own)
-```
+## The SQL Pipeline
 
-## Rebuilding It Yourself
+`build.py` is a two-stage, named-query pipeline — read it top to bottom and
+every number on the dashboard traces back to a query you can see:
 
-Everything here was generated by a two-step pipeline so the whole thing is
-reproducible from the raw CSVs:
+1. **Load** both raw CSVs into SQLite as-is.
+2. **Join and derive** — join on ticker symbol, then derive `revenue`,
+   `net_income`, and `net_margin` from the ratio math above, bucketed into
+   margin and revenue tiers.
+3. **Query** — eight named queries: headline summary, four top-10
+   leaderboards, margin distribution, sector rollup, and the full
+   per-company table used to drive the dashboard's live filters.
 
 ```bash
 python3 build.py        # loads constituents*.csv -> financial.db -> *.csv result files
 python3 build_html.py   # embeds companies_full.csv into dashboard.html
 ```
 
-`build.py` is deliberately written as a set of named, readable SQL queries —
-read it top to bottom and you can see exactly how every number on the
-dashboard was produced. That's the "SQL-first" part: no number appears on
-the dashboard that you can't trace back to a query.
+## Tools Used
+
+SQLite (via Python's `sqlite3`) · SQL joins, `CASE` tiering, derived-column
+arithmetic · vanilla HTML/CSS/JS for the dashboard (no framework, no build
+step) · Python for the load/export pipeline.
+
+## Files in This Repo
+
+| File | Purpose |
+|---|---|
+| `constituents.csv`, `constituents-financials.csv` | raw source data |
+| `build.py` | SQL-first pipeline: loads, cleans, derives, exports |
+| `by_sector.csv`, `companies_full.csv`, `margin_distribution.csv`, `summary.csv`, `top10_*.csv` | one CSV per analysis query, generated by `build.py` |
+| `dashboard_template.html` | dashboard markup/CSS/JS with a data placeholder |
+| `build_html.py` | injects `companies_full.csv` into the template |
+| `dashboard.html` | the finished, self-contained dashboard |
+| `preview_overview.png`, `preview_charts.png` | screenshots used above |
 
 ## Build Your Own Version with Claude (SQL-first)
 
 If you want to practice this workflow rather than just read the finished
 code, work through it with Claude Code one prompt at a time:
 
-**1. Get the data**
-Both CSVs are already checked into the repo root. If you want fresher numbers,
-re-download them from the source links above.
+**1. Get the data** — both CSVs are already checked into the repo root. If
+you want fresher numbers, re-download them from the source links above.
 
 **2. Load it into a local SQLite database**
-> "Load `constituents-financials.csv` and `constituents.csv` into
-> a new SQLite database called `financial.db`. Some numeric columns may be
-> blank for a handful of companies — load everything as text for now, we'll
-> clean it with SQL next."
+> "Load `constituents-financials.csv` and `constituents.csv` into a new
+> SQLite database called `financial.db`. Some numeric columns may be blank
+> for a handful of companies — load everything as text for now, we'll clean
+> it with SQL next."
 
 **3. Explore and clean the data**
 > "Show me the schema and 5 sample rows of each table."
@@ -132,24 +151,16 @@ re-download them from the source links above.
 Ask **"explain this query"** any time a result surprises you.
 
 **5. Save your results**
-> "Save each of those query results as its own CSV file in a `results/`
-> folder."
+> "Save each of those query results as its own CSV file."
 
 **6. Build the dashboard**
-> "Using the CSV files in `results/`, build a single self-contained
-> `dashboard.html`: filter dropdowns for sector and net margin tier; KPI
-> cards for combined revenue, combined income, avg net margin, and avg
-> dividend yield; ranked leaderboards (numbered rows with inline
-> proportional bars, not bar charts) for top 10 by revenue, market cap, net
-> margin, and dividend yield; plus a net margin distribution and a
-> revenue-by-sector breakdown — recomputing when a filter changes, one
-> accent color, no dark mode."
+> "Using those CSV files, build a single self-contained `dashboard.html`:
+> filter dropdowns for sector and net margin tier; KPI cards for combined
+> revenue, combined income, avg net margin, and avg dividend yield; ranked
+> leaderboards (numbered rows with inline proportional bars, not bar charts)
+> for top 10 by revenue, market cap, net margin, and dividend yield; plus a
+> net margin distribution and a revenue-by-sector breakdown — recomputing
+> when a filter changes, one accent color, no dark mode."
 
 Compare your version against [dashboard.html](dashboard.html) once you're
 happy with it.
-
-## Tool
-
-No BI tool required — pure HTML/CSS/JS. If you'd rather build this in
-Tableau Public or Power BI, point either tool at the CSVs in `results/`
-after running `build.py`.
