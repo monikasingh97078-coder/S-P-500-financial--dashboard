@@ -113,54 +113,11 @@ step) · Python for the load/export pipeline.
 | `dashboard.html` | the finished, self-contained dashboard |
 | `preview_overview.png`, `preview_charts.png` | screenshots used above |
 
-## Build Your Own Version with Claude (SQL-first)
+## Notes on Approach
 
-If you want to practice this workflow rather than just read the finished
-code, work through it with Claude Code one prompt at a time:
-
-**1. Get the data** — both CSVs are already checked into the repo root. If
-you want fresher numbers, re-download them from the source links above.
-
-**2. Load it into a local SQLite database**
-> "Load `constituents-financials.csv` and `constituents.csv` into a new
-> SQLite database called `financial.db`. Some numeric columns may be blank
-> for a handful of companies — load everything as text for now, we'll clean
-> it with SQL next."
-
-**3. Explore and clean the data**
-> "Show me the schema and 5 sample rows of each table."
-
-> "Join the two tables on Symbol. Add derived numeric columns: `revenue`
-> (market cap ÷ price/sales) and `net_income` (market cap ÷ price/earnings).
-> Then add `net_margin` (net_income ÷ revenue × 100)."
-
-**4. Ask one SQL question at a time**
-> "Write and run a SQL query: combined revenue, combined net income, average
-> net margin, and average dividend yield across all companies with valid
-> numbers."
-
-> "Write and run a SQL query: top 10 companies by revenue, sorted highest to
-> lowest."
-
-> "Write and run a SQL query: top 10 companies by net margin, restricted to
-> companies with revenue over $1B, sorted highest to lowest."
-
-> "Write and run a SQL query: count of companies bucketed into net margin
-> tiers (<0%, 0-10%, 10-20%, 20-30%, 30%+)."
-
-Ask **"explain this query"** any time a result surprises you.
-
-**5. Save your results**
-> "Save each of those query results as its own CSV file."
-
-**6. Build the dashboard**
-> "Using those CSV files, build a single self-contained `dashboard.html`:
-> filter dropdowns for sector and net margin tier; KPI cards for combined
-> revenue, combined income, avg net margin, and avg dividend yield; ranked
-> leaderboards (numbered rows with inline proportional bars, not bar charts)
-> for top 10 by revenue, market cap, net margin, and dividend yield; plus a
-> net margin distribution and a revenue-by-sector breakdown — recomputing
-> when a filter changes, one accent color, no dark mode."
-
-Compare your version against [dashboard.html](dashboard.html) once you're
-happy with it.
+The derived-metrics step (`revenue = market_cap / price_to_sales`, etc.) is
+the crux of this project — it's what turns a valuation dataset into a
+financials dataset. Everything downstream (the eight SQL queries, the
+dashboard's live filters) is standard aggregation and presentation once that
+derivation is in place. `build.py` is written as named, commented queries
+specifically so that logic is auditable end to end.
